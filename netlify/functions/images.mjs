@@ -64,15 +64,16 @@ export default async (req) => {
     if (!type) return json({ error: "Use a JPG, PNG, GIF, or WebP picture." }, 415);
 
     // Upload -> AI check -> published / human review / trashed
-    let result = await moderateImage(data, type);
-    if (result.verdict === "ok" && needsFrameReview(type, data)) {
-      result = { verdict: "review", reason: "Animated image, needs a manual look" };
-    }
-
-    // The uploader pressed "Request manual review" after the AI rejected the image.
-    // It is never published automatically: it always waits in the admin review queue.
+    // If the uploader pressed "Request manual review" after an AI rejection, skip the AI
+    // (it already ruled on this picture): it always waits in the admin review queue.
+    let result;
     if (form.get("appeal") === "1") {
-      result = { ...result, verdict: "review", reason: `Uploader requested review. AI said: ${result.reason}` };
+      result = { verdict: "review", reason: "Uploader requested review after AI rejection" };
+    } else {
+      result = await moderateImage(data, type);
+      if (result.verdict === "ok" && needsFrameReview(type, data)) {
+        result = { verdict: "review", reason: "Animated image, needs a manual look" };
+      }
     }
 
     const createdAt = new Date().toISOString();
