@@ -1,0 +1,14 @@
+[build]
+  publish = "public"
+  functions = "netlify/functions"
+
+# The old Upload page now lives at /pictures
+[[redirects]]
+  from = "/upload"
+  to = "/pictures.html"
+  status = 301
+
+[[redirects]]
+  from = "/upload.html"
+  to = "/pictures.html"
+  status = 301

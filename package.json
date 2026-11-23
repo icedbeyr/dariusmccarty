@@ -1,0 +1,9 @@
+{
+  "name": "darius-mccarty-site",
+  "version": "1.0.0",
+  "private": true,
+  "description": "darius mccarty site with comments and image uploads, stored in Netlify Blobs",
+  "dependencies": {
+    "@netlify/blobs": "^8.2.0"
+  }
+}

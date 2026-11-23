@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#ff3b3b">
+  <title>darius mccarty</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <nav class="top-nav" aria-label="Site">
+    <a href="comments.html">Comments</a>
+    <a href="pictures.html">Pictures</a>
+  </nav>
+
+  <main class="stage">
+    <section class="panel" aria-labelledby="comments-title">
+      <h2 id="comments-title">Recent Comments</h2>
+      <ul class="panel-list" id="comments-list">
+        <li class="empty">Loading…</li>
+      </ul>
+    </section>
+
+    <div class="portrait-wrap">
+      <img class="portrait" src="https://i.ibb.co/tM5hsSzR/01-dariusmccarty.png" alt="Centered Portrait">
+    </div>
+
+    <section class="panel" aria-labelledby="pictures-title">
+      <h2 id="pictures-title">Recent Pictures</h2>
+      <ul class="panel-list" id="pictures-list">
+        <li class="empty">Loading…</li>
+      </ul>
+    </section>
+  </main>
+
+  <script>
+    const commentsList = document.getElementById("comments-list");
+    const picturesList = document.getElementById("pictures-list");
+
+    function timeAgo(iso) {
+      const seconds = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+      if (seconds < 60) return "just now";
+      const minutes = Math.floor(seconds / 60);
+      if (minutes < 60) return minutes + "m ago";
+      const hours = Math.floor(minutes / 60);
+      if (hours < 24) return hours + "h ago";
+      const days = Math.floor(hours / 24);
+      if (days < 30) return days + "d ago";
+      return new Date(iso).toLocaleDateString();
+    }
+
+    function el(tag, className, text) {
+      const node = document.createElement(tag);
+      if (className) node.className = className;
+      if (text !== undefined) node.textContent = text; // textContent keeps user input from running as HTML
+      return node;
+    }
+
+    function itemHead(name, createdAt) {
+      const head = el("div", "item-head");
+      head.append(el("span", "item-name", name), el("span", "item-time", timeAgo(createdAt)));
+      return head;
+    }
+
+    function showMessage(list, message) {
+      list.replaceChildren(el("li", "empty", message));
+    }
+
+    async function loadComments() {
+      try {
+        const res = await fetch("/api/comments");
+        if (!res.ok) throw new Error();
+        const comments = await res.json();
+        if (!comments.length) return showMessage(commentsList, "No comments yet.");
+        commentsList.replaceChildren(
+          ...comments.map((c) => {
+            const li = el("li");
+            li.append(itemHead(c.name, c.createdAt), el("p", "item-text", c.comment));
+            return li;
+          })
+        );
+      } catch {
+        if (!commentsList.querySelector(".item-name")) showMessage(commentsList, "Couldn’t load comments.");
+      }
+    }
+
+    async function loadPictures() {
+      try {
+        const res = await fetch("/api/images");
+        if (!res.ok) throw new Error();
+        const pictures = await res.json();
+        if (!pictures.length) return showMessage(picturesList, "No pictures yet.");
+        picturesList.replaceChildren(
+          ...pictures.map((p) => {
+            const li = el("li");
+            const link = el("a", "pic-link");
+            link.href = "/api/image/" + encodeURIComponent(p.id);
+            link.target = "_blank";
+            link.rel = "noopener";
+            const img = el("img");
+            img.src = link.href;
+            img.alt = "Picture uploaded by " + p.name;
+            img.loading = "lazy";
+            link.append(img);
+            li.append(itemHead(p.name, p.createdAt), link);
+            return li;
+          })
+        );
+      } catch {
+        if (!picturesList.querySelector(".item-name")) showMessage(picturesList, "Couldn’t load pictures.");
+      }
+    }
+
+    function refresh() {
+      loadComments();
+      loadPictures();
+    }
+
+    refresh();
+    setInterval(refresh, 30000);
+  </script>
+
+</body>
+</html>

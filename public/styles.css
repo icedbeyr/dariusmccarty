@@ -1,0 +1,332 @@
+#nl-badge-frame {
+  display: none !important;
+}
+
+html {
+  /* Phones can expose the page behind the browser bars; make that red, never white */
+  background-color: #ff3b3b;
+  overscroll-behavior: none;
+}
+
+body {
+  margin: 0;
+  height: 100vh;
+  height: 100dvh; /* matches the visible screen on phones as browser bars show/hide */
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  position: relative;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: #fff;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+
+  /* Center the layer and use 250vmax so rotated corners never expose white */
+  top: 50%;
+  left: 50%;
+  width: 250vmax;
+  height: 250vmax;
+  z-index: -1;
+
+  /* Fallback for browsers that don't understand "in oklch longer hue" */
+  background: linear-gradient(90deg, #ff3b3b, #ffb43b, #f6ff3b, #3bff6a, #3bd5ff, #5a3bff, #ff3bd9, #ff3b3b);
+
+  /* Original rainbow gradient (unchanged) */
+  background: linear-gradient(
+    90deg in oklch longer hue,
+    #ff3b3b,
+    #ff3b3b,
+    #ff3b3b
+  );
+
+  background-size: 400% 100%;
+
+  /* Keeps the oversized layer centered while tilted at 45 degrees */
+  transform: translate(-50%, -50%) rotate(-45deg);
+
+  /* Slowed down to 11s for an even gentler flow */
+  animation: ultraSmoothFlow 11s linear infinite;
+}
+
+@keyframes ultraSmoothFlow {
+  0% {
+    background-position: 0% 0%;
+  }
+  100% {
+    background-position: 200% 0%;
+  }
+}
+
+/* ---------- Top navigation ---------- */
+.top-nav {
+  position: fixed;
+  top: calc(16px + env(safe-area-inset-top, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  display: flex;
+  gap: 8px;
+}
+
+.top-nav a,
+.btn {
+  font: inherit;
+  font-weight: 600;
+  font-size: 1rem;
+  color: #fff;
+  text-decoration: none;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 999px;
+  padding: 9px 22px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.top-nav a:hover,
+.btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+a:focus-visible,
+.btn:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 2px;
+}
+
+/* ---------- Main page layout ---------- */
+.stage {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 0 24px;
+  display: grid;
+  grid-template-columns: minmax(0, 320px) minmax(0, 1fr) minmax(0, 320px);
+  gap: 24px;
+  align-items: center;
+  justify-items: center;
+}
+
+.portrait {
+  max-width: 100%;
+  max-height: min(90vh, calc(100vh - 140px));
+}
+
+.panel {
+  width: 100%;
+  height: min(70vh, 640px);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 16px;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+  overflow: hidden;
+}
+
+.panel h2 {
+  margin: 0;
+  padding: 16px 18px 12px;
+  font-size: 1.15rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.panel-list {
+  flex: 1;
+  overflow-y: auto;
+  list-style: none;
+  margin: 0;
+  padding: 6px 18px 12px;
+  scrollbar-color: rgba(255, 255, 255, 0.5) transparent;
+}
+
+.panel-list li {
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.panel-list li:last-child {
+  border-bottom: 0;
+}
+
+.item-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.item-name {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.item-time {
+  font-size: 0.8rem;
+  opacity: 0.85;
+  white-space: nowrap;
+}
+
+.item-text {
+  margin: 4px 0 0;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.pic-link {
+  display: block;
+  margin-top: 8px;
+}
+
+.pic-link img {
+  display: block;
+  width: 100%;
+  max-width: none;
+  max-height: 220px;
+  object-fit: cover;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.empty {
+  padding: 16px 0;
+  opacity: 0.9;
+}
+
+/* ---------- Form pages ---------- */
+body.form-page {
+  height: auto;
+  min-height: 100vh;
+  min-height: 100dvh;
+  overflow: auto;
+  padding: calc(24px + env(safe-area-inset-top, 0px)) 16px calc(24px + env(safe-area-inset-bottom, 0px));
+  box-sizing: border-box;
+}
+
+.card {
+  width: min(100%, 440px);
+  box-sizing: border-box;
+  padding: 28px;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  border-radius: 18px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+}
+
+.card h1 {
+  margin: 0 0 18px;
+  font-size: 1.5rem;
+}
+
+.card label {
+  display: block;
+  margin: 14px 0 6px;
+  font-weight: 600;
+}
+
+.card input[type="text"],
+.card textarea,
+.card input[type="file"] {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  color: #222;
+  background: rgba(255, 255, 255, 0.94);
+  border: 0;
+  border-radius: 10px;
+  padding: 11px 12px;
+}
+
+.card textarea {
+  min-height: 130px;
+  resize: vertical;
+}
+
+.hint {
+  margin: 6px 0 0;
+  font-size: 0.85rem;
+  opacity: 0.9;
+}
+
+.preview {
+  display: none;
+  width: 100%;
+  max-width: none;
+  max-height: 220px;
+  object-fit: contain;
+  margin-top: 12px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 22px;
+}
+
+.actions .back {
+  color: #fff;
+}
+
+.actions .btn[disabled] {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.status {
+  min-height: 1.3em;
+  margin: 14px 0 0;
+  font-weight: 600;
+}
+
+/* Honeypot field: hidden from people, visible to bots */
+.hp {
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+/* ---------- Small screens ---------- */
+@media (max-width: 900px) {
+  body:not(.form-page) {
+    display: block;
+    height: auto;
+    min-height: 100vh;
+    min-height: 100dvh;
+    overflow: auto;
+  }
+
+  .stage {
+    height: auto;
+    grid-template-columns: minmax(0, 1fr);
+    padding: calc(76px + env(safe-area-inset-top, 0px)) 16px calc(24px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .portrait-wrap {
+    order: -1;
+  }
+
+  .portrait {
+    max-height: 80vh;
+  }
+
+  .panel {
+    height: 360px;
+  }
+}

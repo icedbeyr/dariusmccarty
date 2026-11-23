@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#ff3b3b">
+  <title>Pictures · darius mccarty</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="form-page">
+
+  <main class="card">
+    <h1>Upload a picture</h1>
+
+    <form id="upload-form" novalidate>
+      <label for="name">Name</label>
+      <input type="text" id="name" name="name" maxlength="40" autocomplete="name" required>
+
+      <label for="image">Picture</label>
+      <input type="file" id="image" name="image" accept="image/jpeg,image/png,image/gif,image/webp" required>
+      <p class="hint">JPG, PNG, GIF, or WebP. Large photos are shrunk automatically to fit.</p>
+      <img class="preview" id="preview" alt="Selected image preview">
+
+      <div class="hp" aria-hidden="true">
+        <label for="website">Leave this field empty</label>
+        <input type="text" id="website" name="website" tabindex="-1" autocomplete="off">
+      </div>
+
+      <p class="status" id="status" role="status" aria-live="polite"></p>
+
+      <div class="actions">
+        <a class="back" href="index.html">Back</a>
+        <button class="btn" type="submit" id="submit">Upload picture</button>
+      </div>
+    </form>
+  </main>
+
+  <script>
+    const MAX_BYTES = 3.8 * 1024 * 1024; // server accepts up to 4 MB
+    const form = document.getElementById("upload-form");
+    const status = document.getElementById("status");
+    const submit = document.getElementById("submit");
+    const preview = document.getElementById("preview");
+    let previewUrl = null;
+
+    form.image.addEventListener("change", () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      const file = form.image.files[0];
+      if (!file) {
+        preview.style.display = "none";
+        return;
+      }
+      previewUrl = URL.createObjectURL(file);
+      preview.src = previewUrl;
+      preview.style.display = "block";
+    });
+
+    // Re-encode oversized photos as JPEG so they fit within the upload limit.
+    async function fitToLimit(file) {
+      if (file.size <= MAX_BYTES) return file;
+      if (file.type === "image/gif") throw new Error("GIFs must be 3.8 MB or smaller.");
+
+      const bitmap = await createImageBitmap(file);
+      let scale = Math.min(1, 2400 / Math.max(bitmap.width, bitmap.height));
+      let quality = 0.9;
+
+      for (let attempt = 0; attempt < 6; attempt++) {
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+        canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+        const ctx = canvas.getContext("2d");
+        ctx.fillStyle = "#fff"; // JPEG has no transparency
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+
+        const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
+        if (blob && blob.size <= MAX_BYTES) {
+          const base = file.name.replace(/\.[^.]+$/, "") || "image";
+          return new File([blob], base + ".jpg", { type: "image/jpeg" });
+        }
+        scale *= 0.8;
+        quality = Math.max(0.6, quality - 0.05);
+      }
+      throw new Error("That image is too large. Try a smaller one.");
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+
+      const name = form.name.value.trim();
+      const file = form.image.files[0];
+      if (!name) {
+        status.textContent = "Enter your name.";
+        return;
+      }
+      if (!file) {
+        status.textContent = "Choose a picture to upload.";
+        return;
+      }
+
+      submit.disabled = true;
+      status.textContent = "Uploading…";
+
+      try {
+        const ready = await fitToLimit(file);
+        const body = new FormData();
+        body.append("name", name);
+        body.append("image", ready);
+        body.append("website", form.website.value);
+
+        const res = await fetch("/api/images", { method: "POST", body });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || "Couldn’t upload your picture. Try again.");
+
+        status.textContent = "Picture uploaded. Taking you back…";
+        form.reset();
+        preview.style.display = "none";
+        setTimeout(() => (window.location.href = "index.html"), 1000);
+      } catch (err) {
+        status.textContent = err.message;
+        submit.disabled = false;
+      }
+    });
+  </script>
+
+</body>
+</html>

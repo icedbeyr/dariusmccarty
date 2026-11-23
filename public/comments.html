@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#ff3b3b">
+  <title>Leave a comment · darius mccarty</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="form-page">
+
+  <main class="card">
+    <h1>Leave a comment</h1>
+
+    <form id="comment-form" novalidate>
+      <label for="name">Name</label>
+      <input type="text" id="name" name="name" maxlength="40" autocomplete="name" required>
+
+      <label for="comment">Comment</label>
+      <textarea id="comment" name="comment" maxlength="500" required></textarea>
+      <p class="hint">Up to 500 characters.</p>
+
+      <div class="hp" aria-hidden="true">
+        <label for="website">Leave this field empty</label>
+        <input type="text" id="website" name="website" tabindex="-1" autocomplete="off">
+      </div>
+
+      <p class="status" id="status" role="status" aria-live="polite"></p>
+
+      <div class="actions">
+        <a class="back" href="index.html">Back</a>
+        <button class="btn" type="submit" id="submit">Post comment</button>
+      </div>
+    </form>
+  </main>
+
+  <script>
+    const form = document.getElementById("comment-form");
+    const status = document.getElementById("status");
+    const submit = document.getElementById("submit");
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+
+      const name = form.name.value.trim();
+      const comment = form.comment.value.trim();
+      if (!name || !comment) {
+        status.textContent = "Enter your name and a comment.";
+        return;
+      }
+
+      submit.disabled = true;
+      status.textContent = "Posting…";
+
+      try {
+        const res = await fetch("/api/comments", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, comment, website: form.website.value }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || "Couldn’t post your comment. Try again.");
+
+        status.textContent = "Comment posted. Taking you back…";
+        form.reset();
+        setTimeout(() => (window.location.href = "index.html"), 1000);
+      } catch (err) {
+        status.textContent = err.message;
+        submit.disabled = false;
+      }
+    });
+  </script>
+
+</body>
+</html>
