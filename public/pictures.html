@@ -112,10 +112,15 @@
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || "Couldn’t upload your picture. Try again.");
 
-        status.textContent = "Picture uploaded. Taking you back…";
         form.reset();
         preview.style.display = "none";
-        setTimeout(() => (window.location.href = "index.html"), 1000);
+        if (data.status === "pending") {
+          status.textContent = "Thanks! Your picture is waiting for review and will appear once it’s approved.";
+          setTimeout(() => (window.location.href = "index.html"), 3500);
+        } else {
+          status.textContent = "Picture uploaded. Taking you back…";
+          setTimeout(() => (window.location.href = "index.html"), 1000);
+        }
       } catch (err) {
         status.textContent = err.message;
         submit.disabled = false;

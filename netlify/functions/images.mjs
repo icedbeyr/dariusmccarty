@@ -1,24 +1,19 @@
 import { getStore } from "@netlify/blobs";
+import { json, newKey, trimStore } from "../lib/common.mjs";
+import { moderateImage, needsFrameReview } from "../lib/moderation.mjs";
 
 const MAX_NAME = 40;
 const MAX_BYTES = 4 * 1024 * 1024; // Netlify Functions cap request bodies at 6 MB
 const LIST_LIMIT = 20;
-
-const json = (data, status = 200) =>
-  new Response(JSON.stringify(data), {
-    status,
-    headers: {
-      "Content-Type": "application/json; charset=utf-8",
-      "Cache-Control": "no-store",
-    },
-  });
-
-const newKey = () =>
-  `${String(9999999999999 - Date.now()).padStart(13, "0")}-${crypto.randomUUID()}`;
+const MAX_PENDING = 100; // stop accepting uncertain images if the review queue is this full
+const MAX_LOG = 100;
 
 const clean = (s) => s.replace(/[\u0000-\u001F\u007F]/g, "").trim();
 
-const store = () => getStore({ name: "images", consistency: "strong" });
+const open = (name) => getStore({ name, consistency: "strong" });
+const published = () => open("images");
+const pendingStore = () => open("pending-images");
+const logStore = () => open("moderation-log");
 
 // Identify the real file type from its bytes instead of trusting the browser.
 function sniffType(bytes) {
@@ -32,7 +27,7 @@ function sniffType(bytes) {
 
 export default async (req) => {
   if (req.method === "GET") {
-    const s = store();
+    const s = published();
     const { blobs } = await s.list();
     const keys = blobs.map((b) => b.key).sort().slice(0, LIST_LIMIT);
     const items = await Promise.all(
@@ -61,17 +56,56 @@ export default async (req) => {
 
     if (!name) return json({ error: "Enter your name." }, 400);
     if (name.length > MAX_NAME) return json({ error: `Name must be ${MAX_NAME} characters or fewer.` }, 400);
-    if (!file || typeof file === "string" || file.size === 0) return json({ error: "Choose an image to upload." }, 400);
-    if (file.size > MAX_BYTES) return json({ error: "Image must be 4 MB or smaller." }, 413);
+    if (!file || typeof file === "string" || file.size === 0) return json({ error: "Choose a picture to upload." }, 400);
+    if (file.size > MAX_BYTES) return json({ error: "Picture must be 4 MB or smaller." }, 413);
 
     const data = await file.arrayBuffer();
     const type = sniffType(new Uint8Array(data, 0, 12));
-    if (!type) return json({ error: "Use a JPG, PNG, GIF, or WebP image." }, 415);
+    if (!type) return json({ error: "Use a JPG, PNG, GIF, or WebP picture." }, 415);
 
-    await store().set(newKey(), data, {
-      metadata: { name, type, createdAt: new Date().toISOString() },
-    });
-    return json({ ok: true }, 201);
+    // Upload -> AI check -> published / human review / trashed
+    let result = await moderateImage(data, type);
+    if (result.verdict === "ok" && needsFrameReview(type, data)) {
+      result = { verdict: "review", reason: "Animated image, needs a manual look" };
+    }
+
+    const createdAt = new Date().toISOString();
+
+    if (result.verdict === "reject") {
+      // Trashed: the image itself is never stored, only a short note for the admin.
+      const log = logStore();
+      await log.setJSON(newKey(), {
+        name,
+        createdAt,
+        reason: result.reason,
+        top: result.top ?? "",
+        score: result.score ?? 0,
+      });
+      await trimStore(log, MAX_LOG);
+      return json({ status: "rejected", error: "That picture was rejected by the content filter." }, 422);
+    }
+
+    if (result.verdict === "review") {
+      const pending = pendingStore();
+      const { blobs } = await pending.list();
+      if (blobs.length >= MAX_PENDING) {
+        return json({ error: "Too many pictures are waiting for review. Try again later." }, 503);
+      }
+      await pending.set(newKey(), data, {
+        metadata: {
+          name,
+          type,
+          createdAt,
+          reason: String(result.reason).slice(0, 120),
+          top: result.top ?? "",
+          score: result.score ?? 0,
+        },
+      });
+      return json({ status: "pending" }, 202);
+    }
+
+    await published().set(newKey(), data, { metadata: { name, type, createdAt } });
+    return json({ status: "published" }, 201);
   }
 
   return json({ error: "Method not allowed." }, 405);

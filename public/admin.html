@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#ff3b3b">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Admin · darius mccarty</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="form-page admin-page">
+
+  <main class="admin">
+    <section class="card login-card" id="login-card">
+      <h1>Admin</h1>
+      <form id="login-form">
+        <label for="password">Password</label>
+        <input type="password" id="password" autocomplete="current-password" required>
+        <p class="status" id="login-status" role="status" aria-live="polite"></p>
+        <div class="actions">
+          <a class="back" href="index.html">Back</a>
+          <button class="btn" type="submit" id="login-submit">Sign in</button>
+        </div>
+      </form>
+    </section>
+
+    <section id="panel" hidden>
+      <header class="admin-head">
+        <h1>Admin</h1>
+        <div class="admin-actions">
+          <a class="btn" href="index.html">View site</a>
+          <button class="btn" type="button" id="refresh">Refresh</button>
+          <button class="btn" type="button" id="logout">Sign out</button>
+        </div>
+      </header>
+
+      <nav class="tabs" aria-label="Moderation sections">
+        <button class="btn tab" type="button" data-tab="pending">Needs review <span data-count="pending"></span></button>
+        <button class="btn tab" type="button" data-tab="images">Pictures <span data-count="images"></span></button>
+        <button class="btn tab" type="button" data-tab="comments">Comments <span data-count="comments"></span></button>
+        <button class="btn tab" type="button" data-tab="rejected">Rejected by AI <span data-count="rejected"></span></button>
+      </nav>
+
+      <p class="status" id="panel-status" role="status" aria-live="polite"></p>
+      <ul class="admin-list" id="list"></ul>
+    </section>
+  </main>
+
+  <script>
+    const TOKEN_KEY = "dm-admin-token";
+    const loginCard = document.getElementById("login-card");
+    const loginForm = document.getElementById("login-form");
+    const loginStatus = document.getElementById("login-status");
+    const loginSubmit = document.getElementById("login-submit");
+    const panel = document.getElementById("panel");
+    const panelStatus = document.getElementById("panel-status");
+    const listEl = document.getElementById("list");
+
+    let token = "";
+    try { token = sessionStorage.getItem(TOKEN_KEY) || ""; } catch { /* storage unavailable */ }
+    let data = null;
+    let currentTab = "pending";
+    let thumbUrls = [];
+
+    function el(tag, className, text) {
+      const node = document.createElement(tag);
+      if (className) node.className = className;
+      if (text !== undefined) node.textContent = text; // textContent keeps user input from running as HTML
+      return node;
+    }
+
+    function formatTime(iso) {
+      return new Date(iso).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+    }
+
+    function showLogin(message) {
+      token = "";
+      try { sessionStorage.removeItem(TOKEN_KEY); } catch { /* ignore */ }
+      panel.hidden = true;
+      loginCard.hidden = false;
+      loginStatus.textContent = message || "";
+    }
+
+    async function api(path, options = {}) {
+      const headers = { Authorization: "Bearer " + token };
+      if (options.body) headers["Content-Type"] = "application/json";
+      const res = await fetch(path, { ...options, headers });
+      if (res.status === 401) {
+        showLogin("Session expired. Sign in again.");
+        throw new Error("unauthorized");
+      }
+      return res;
+    }
+
+    // ---------- Sign in / out ----------
+    loginForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      loginSubmit.disabled = true;
+      loginStatus.textContent = "Signing in…";
+      try {
+        const res = await fetch("/api/admin/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password: document.getElementById("password").value }),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body.error || "Couldn’t sign in.");
+        token = body.token;
+        try { sessionStorage.setItem(TOKEN_KEY, token); } catch { /* ignore */ }
+        loginForm.reset();
+        await loadAll();
+      } catch (err) {
+        loginStatus.textContent = err.message;
+      } finally {
+        loginSubmit.disabled = false;
+      }
+    });
+
+    document.getElementById("logout").addEventListener("click", () => showLogin(""));
+    document.getElementById("refresh").addEventListener("click", () => loadAll());
+
+    document.querySelectorAll(".tab").forEach((button) => {
+      button.addEventListener("click", () => {
+        currentTab = button.dataset.tab;
+        render();
+      });
+    });
+
+    // ---------- Data ----------
+    async function loadAll() {
+      panelStatus.textContent = "";
+      try {
+        const res = await api("/api/admin/overview");
+        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Couldn’t load.");
+        data = await res.json();
+        loginCard.hidden = true;
+        panel.hidden = false;
+        render();
+      } catch (err) {
+        if (err.message !== "unauthorized") {
+          panel.hidden = false;
+          loginCard.hidden = true;
+          panelStatus.textContent = err.message;
+        }
+      }
+    }
+
+    async function act(path, body, button) {
+      button.disabled = true;
+      panelStatus.textContent = "";
+      try {
+        const res = await api(path, { method: "POST", body: JSON.stringify(body) });
+        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "That didn’t work.");
+        await loadAll();
+      } catch (err) {
+        if (err.message !== "unauthorized") panelStatus.textContent = err.message;
+        button.disabled = false;
+      }
+    }
+
+    function removeButton(type, id, label) {
+      const button = el("button", "btn btn-danger", "Delete");
+      button.type = "button";
+      button.addEventListener("click", () => {
+        if (confirm("Delete " + label + "? This can’t be undone.")) act("/api/admin/delete", { type, id }, button);
+      });
+      return button;
+    }
+
+    // ---------- Rendering ----------
+    function emptyItem(message) {
+      return el("li", "admin-empty", message);
+    }
+
+    function moreNote(section) {
+      return section.total > section.items.length
+        ? el("li", "admin-empty", "Showing the newest " + section.items.length + " of " + section.total + ".")
+        : null;
+    }
+
+    async function loadPendingThumb(img, id) {
+      try {
+        const res = await api("/api/admin/pending-image?id=" + encodeURIComponent(id));
+        if (!res.ok) return;
+        const url = URL.createObjectURL(await res.blob());
+        thumbUrls.push(url);
+        img.src = url;
+      } catch { /* leave the placeholder */ }
+    }
+
+    function pictureRow(item, { pending }) {
+      const li = el("li", "admin-item");
+      const img = el("img", "admin-thumb");
+      img.alt = "Picture uploaded by " + item.name;
+      if (pending) loadPendingThumb(img, item.id);
+      else { img.src = "/api/image/" + encodeURIComponent(item.id); img.loading = "lazy"; }
+
+      const body = el("div", "admin-body");
+      body.append(el("div", "item-name", item.name), el("div", "item-time", formatTime(item.createdAt)));
+      if (pending && item.reason) body.append(el("div", "admin-reason", "AI note: " + item.reason));
+
+      const buttons = el("div", "admin-buttons");
+      if (pending) {
+        const approve = el("button", "btn", "Approve");
+        approve.type = "button";
+        approve.addEventListener("click", () => act("/api/admin/approve", { id: item.id }, approve));
+        buttons.append(approve);
+      }
+      buttons.append(removeButton(pending ? "pending" : "image", item.id, "this picture"));
+      body.append(buttons);
+
+      li.append(img, body);
+      return li;
+    }
+
+    function render() {
+      if (!data) return;
+      thumbUrls.forEach((url) => URL.revokeObjectURL(url));
+      thumbUrls = [];
+
+      for (const key of ["pending", "images", "comments", "rejected"]) {
+        document.querySelector('[data-count="' + key + '"]').textContent = "(" + data[key].total + ")";
+      }
+      document.querySelectorAll(".tab").forEach((button) => {
+        button.setAttribute("aria-selected", String(button.dataset.tab === currentTab));
+      });
+
+      const rows = [];
+
+      if (currentTab === "pending") {
+        if (!data.pending.items.length) rows.push(emptyItem("Nothing is waiting for review."));
+        data.pending.items.forEach((item) => rows.push(pictureRow(item, { pending: true })));
+        rows.push(moreNote(data.pending));
+      }
+
+      if (currentTab === "images") {
+        if (!data.images.items.length) rows.push(emptyItem("No pictures are published."));
+        data.images.items.forEach((item) => rows.push(pictureRow(item, { pending: false })));
+        rows.push(moreNote(data.images));
+      }
+
+      if (currentTab === "comments") {
+        if (!data.comments.items.length) rows.push(emptyItem("No comments yet."));
+        data.comments.items.forEach((item) => {
+          const li = el("li", "admin-item");
+          const body = el("div", "admin-body");
+          body.append(el("div", "item-name", item.name), el("div", "item-time", formatTime(item.createdAt)), el("p", "item-text", item.comment));
+          const buttons = el("div", "admin-buttons");
+          buttons.append(removeButton("comment", item.id, "this comment"));
+          body.append(buttons);
+          li.append(body);
+          rows.push(li);
+        });
+        rows.push(moreNote(data.comments));
+      }
+
+      if (currentTab === "rejected") {
+        const intro = el("li", "admin-empty", "Pictures the AI was sure were harmful. They were trashed and never stored, so only this note remains.");
+        rows.push(intro);
+        data.rejected.items.forEach((item) => {
+          const li = el("li", "admin-item");
+          const body = el("div", "admin-body");
+          body.append(
+            el("div", "item-name", item.name),
+            el("div", "item-time", formatTime(item.createdAt)),
+            el("div", "admin-reason", "AI note: " + item.reason)
+          );
+          li.append(body);
+          rows.push(li);
+        });
+        if (data.rejected.items.length) {
+          const li = el("li", "admin-empty");
+          const clear = el("button", "btn btn-danger", "Clear this list");
+          clear.type = "button";
+          clear.addEventListener("click", () => {
+            if (confirm("Clear the rejected list?")) act("/api/admin/clear-log", {}, clear);
+          });
+          li.append(clear);
+          rows.push(li);
+        }
+      }
+
+      listEl.replaceChildren(...rows.filter(Boolean));
+    }
+
+    if (token) loadAll();
+  </script>
+
+</body>
+</html>
