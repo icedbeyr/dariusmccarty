@@ -69,6 +69,12 @@ export default async (req) => {
       result = { verdict: "review", reason: "Animated image, needs a manual look" };
     }
 
+    // The uploader pressed "Request manual review" after the AI rejected the image.
+    // It is never published automatically: it always waits in the admin review queue.
+    if (form.get("appeal") === "1") {
+      result = { ...result, verdict: "review", reason: `Uploader requested review. AI said: ${result.reason}` };
+    }
+
     const createdAt = new Date().toISOString();
 
     if (result.verdict === "reject") {

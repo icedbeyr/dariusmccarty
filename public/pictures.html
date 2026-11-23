@@ -42,8 +42,16 @@
     const submit = document.getElementById("submit");
     const preview = document.getElementById("preview");
     let previewUrl = null;
+    let appealFile = null; // the picture the AI rejected, kept so it can be sent for manual review
+
+    function leaveAppealMode() {
+      appealFile = null;
+      submit.textContent = "Upload picture";
+    }
 
     form.image.addEventListener("change", () => {
+      leaveAppealMode(); // a new image is selected: back to a normal upload
+      status.textContent = "";
       if (previewUrl) URL.revokeObjectURL(previewUrl);
       const file = form.image.files[0];
       if (!file) {
@@ -88,7 +96,7 @@
       event.preventDefault();
 
       const name = form.name.value.trim();
-      const file = form.image.files[0];
+      const file = appealFile || form.image.files[0];
       if (!name) {
         status.textContent = "Enter your name.";
         return;
@@ -99,23 +107,36 @@
       }
 
       submit.disabled = true;
-      status.textContent = "Uploading…";
+      status.textContent = appealFile ? "Sending for review…" : "Uploading…";
 
       try {
-        const ready = await fitToLimit(file);
+        const ready = appealFile || (await fitToLimit(file));
         const body = new FormData();
         body.append("name", name);
         body.append("image", ready);
         body.append("website", form.website.value);
+        if (appealFile) body.append("appeal", "1");
 
         const res = await fetch("/api/images", { method: "POST", body });
         const data = await res.json().catch(() => ({}));
+        if (data.status === "rejected") {
+          // Keep the picture and offer a human review instead of a plain retry.
+          appealFile = ready;
+          submit.textContent = "Request manual review";
+          status.textContent = "The automatic filter rejected this picture. If you think that’s a mistake, press “Request manual review”, or choose a different picture.";
+          submit.disabled = false;
+          return;
+        }
         if (!res.ok) throw new Error(data.error || "Couldn’t upload your picture. Try again.");
 
+        const wasAppeal = Boolean(appealFile);
         form.reset();
+        leaveAppealMode();
         preview.style.display = "none";
         if (data.status === "pending") {
-          status.textContent = "Thanks! Your picture is waiting for review and will appear once it’s approved.";
+          status.textContent = wasAppeal
+            ? "Sent for manual review. It will appear if an admin approves it."
+            : "Thanks! Your picture is waiting for review and will appear once it’s approved.";
           setTimeout(() => (window.location.href = "index.html"), 3500);
         } else {
           status.textContent = "Picture uploaded. Taking you back…";
